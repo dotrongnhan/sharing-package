@@ -2,8 +2,8 @@ package usecase
 
 import (
 	"context"
-	"sharing-package/database"
-	"sharing-package/pkg/logger"
+	"github.com/dotrongnhan/sharing-package/database"
+	"github.com/dotrongnhan/sharing-package/pkg/logger"
 )
 
 func TransactionMiddleware(tm database.TransactionManager) Middleware {

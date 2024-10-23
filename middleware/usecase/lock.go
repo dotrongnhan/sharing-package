@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"context"
-	"sharing-package/pkg/logger"
+	"github.com/dotrongnhan/sharing-package/pkg/logger"
 	"sync"
 )
 
