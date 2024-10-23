@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Masterminds/squirrel"
+	"github.com/dotrongnhan/sharing-package/database"
+	"github.com/dotrongnhan/sharing-package/pkg/constants"
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"sharing-package/database"
-	"sharing-package/pkg/constants"
 	"strings"
 )
 

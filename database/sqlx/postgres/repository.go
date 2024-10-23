@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	sq "github.com/Masterminds/squirrel"
+	"github.com/dotrongnhan/sharing-package/database"
+	"github.com/dotrongnhan/sharing-package/pkg/constants"
+	"github.com/dotrongnhan/sharing-package/pkg/logger"
 	"github.com/jmoiron/sqlx"
-	"sharing-package/database"
-	"sharing-package/pkg/constants"
-	"sharing-package/pkg/logger"
 )
 
 type repository[T any] struct {
