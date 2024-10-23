@@ -1,4 +1,4 @@
-module sharing-package
+module github.com/dotrongnhan/sharing-package
 
 go 1.22
 
