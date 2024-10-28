@@ -118,7 +118,12 @@ func GetColumnsAndValuesForMany(models []interface{}) ([]string, [][]interface{}
 
 func GetMetaPagination(total uint64, paging *Paging) *Meta {
 	if total == 0 || paging == nil || paging.Limit == 0 {
-		return nil
+		return &Meta{
+			ItemsPerPage: total,
+			TotalItems:   total,
+			CurrentPage:  1,
+			TotalPages:   1,
+		}
 	}
 
 	totalPages := (total + paging.Limit - 1) / paging.Limit
