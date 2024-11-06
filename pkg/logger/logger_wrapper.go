@@ -17,9 +17,9 @@ func NewContextWithTraceID(ctx context.Context) context.Context {
 	traceID := uuid.NewString()
 	return context.WithValue(ctx, TraceKey, traceID)
 }
-func GenerateTraceID(serviceName string) string {
+func GenerateTraceID() string {
 	uUid := uuid.NewString()
-	traceID := fmt.Sprintf("%s-%s", serviceName, strings.ReplaceAll(uUid, "-", ""))
+	traceID := fmt.Sprintf("%s", strings.ReplaceAll(uUid, "-", ""))
 	return traceID
 }
 func NewBackgroundContextWithTraceID(serviceName string) context.Context {

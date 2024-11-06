@@ -2,7 +2,10 @@ package logger
 
 import "github.com/go-kratos/kratos/v2/log"
 
-const TraceKey = "trace_id"
+const (
+	TraceKey         = "trace_id"
+	TraceIDHeaderKey = "X-Trace-ID"
+)
 
 type JSONLogger struct {
 	Logger  log.Logger
