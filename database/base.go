@@ -12,6 +12,7 @@ type BaseRepository[T any] interface {
 	CreateMany(ctx context.Context, entity []*T) ([]string, error)
 	Update(ctx context.Context, id string, entity *T) error
 	Delete(ctx context.Context, id string) error
+	DeleteByCondition(ctx context.Context, condition *CommonCondition) error
 	DeleteMany(ctx context.Context, ids []string) error
 	ExistById(ctx context.Context, id string) (bool, error)
 }
