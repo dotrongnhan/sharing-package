@@ -316,6 +316,36 @@ func (r *repository[T]) DeleteMany(ctx context.Context, ids []string) error {
 	return nil
 }
 
+func (r *repository[T]) DeleteByCondition(ctx context.Context, condition *database.CommonCondition) error {
+	ctxLogger := logger.NewLogger(ctx)
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	db := psql.Update(r.table)
+	db, err := BuildUpdateConditions(db, condition.Conditions)
+	if err != nil {
+		ctxLogger.Errorf("Failed while build query, err: %v", err)
+		return err
+	}
+	var entity T
+	if deleteInterface, ok := any(&entity).(BeforeDeleteInterface); ok {
+		if err = deleteInterface.BeforeDelete(ctx, r.db, &db); err != nil {
+			ctxLogger.Errorf("Failed while execute BeforeDelete, err: %v", err)
+			return err
+		}
+	}
+	query, args, err := db.ToSql()
+	if err != nil {
+		ctxLogger.Errorf("Failed while build query, err: %v", err)
+		return err
+	}
+	err = Exec(ctx, r.db, query, args...)
+	if err != nil {
+		ctxLogger.Errorf("Failed while delete %s, err: %v", r.table, err)
+		return err
+	}
+	return nil
+}
+
 func (r *repository[T]) ExistById(ctx context.Context, id string) (bool, error) {
 	ctxLogger := logger.NewLogger(ctx)
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)

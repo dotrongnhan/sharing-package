@@ -181,3 +181,35 @@ func BuildPaging(db squirrel.SelectBuilder, paging *database.Paging) squirrel.Se
 	db = db.Limit(limit).Offset(offset)
 	return db
 }
+
+func BuildUpdateConditions(db squirrel.UpdateBuilder, conditions []database.Condition) (squirrel.UpdateBuilder, error) {
+	for _, cond := range conditions {
+		switch strings.ToLower(cond.Op) {
+		case constants.Equal:
+			db = db.Where(squirrel.Eq{cond.Field: cond.Value})
+		case constants.NotEqual:
+			db = db.Where(squirrel.NotEq{cond.Field: cond.Value})
+		case constants.LessThan:
+			db = db.Where(squirrel.Lt{cond.Field: cond.Value})
+		case constants.GreaterThan:
+			db = db.Where(squirrel.Gt{cond.Field: cond.Value})
+		case constants.LessThanOrEqual:
+			db = db.Where(squirrel.LtOrEq{cond.Field: cond.Value})
+		case constants.GreaterThanOrEqual:
+			db = db.Where(squirrel.GtOrEq{cond.Field: cond.Value})
+		case constants.In:
+			db = db.Where(squirrel.Eq{cond.Field: cond.Value})
+		case constants.Like:
+			db = db.Where(squirrel.Like{cond.Field: cond.Value})
+		case constants.NotLike:
+			db = db.Where(squirrel.NotLike{cond.Field: cond.Value})
+		case constants.ILike:
+			db = db.Where(squirrel.ILike{cond.Field: cond.Value})
+		case constants.NotILike:
+			db = db.Where(squirrel.NotILike{cond.Field: cond.Value})
+		default:
+			return db, fmt.Errorf("unsupported operator: %s", cond.Op)
+		}
+	}
+	return db, nil
+}
