@@ -120,6 +120,9 @@ func Delete(ctx context.Context, db *sqlx.DB, query string, args ...interface{})
 }
 
 func BuildQuery(db squirrel.SelectBuilder, condition *database.CommonCondition) (squirrel.SelectBuilder, error) {
+	if !condition.IsSkipDeletedAt {
+		condition.WithCondition("deleted_at", nil, constants.Equal)
+	}
 	db, err := BuildConditions(db, condition.Conditions)
 	if err != nil {
 		return db, err
@@ -212,4 +215,11 @@ func BuildUpdateConditions(db squirrel.UpdateBuilder, conditions []database.Cond
 		}
 	}
 	return db, nil
+}
+
+func getCondition(condition *database.CommonCondition) *database.CommonCondition {
+	if condition == nil {
+		return database.NewCommonCondition()
+	}
+	return condition
 }
