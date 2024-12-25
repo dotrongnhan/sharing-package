@@ -25,6 +25,7 @@ func NewRepository[T any](db *sqlx.DB, table string) database.BaseRepository[T] 
 func (r *repository[T]) CountByCondition(ctx context.Context, condition *database.CommonCondition) (uint64, error) {
 	ctxLogger := logger.NewLogger(ctx)
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+	condition = getCondition(condition)
 	db := psql.Select("count(*)").
 		Where("").
 		From(r.table)
@@ -63,7 +64,7 @@ func (r *repository[T]) TableName() string {
 
 func (r *repository[T]) GetByCondition(ctx context.Context, condition *database.CommonCondition) (*database.Pagination[T], error) {
 	ctxLogger := logger.NewLogger(ctx)
-	condition.WithCondition("deleted_at", nil, constants.Equal)
+	condition = getCondition(condition)
 	total, err := r.CountByCondition(ctx, condition)
 	if err != nil {
 		ctxLogger.Errorf("Failed while get total, err: %v", err)
@@ -99,7 +100,7 @@ func (r *repository[T]) GetByCondition(ctx context.Context, condition *database.
 
 func (r *repository[T]) GetMany(ctx context.Context, condition *database.CommonCondition) ([]*T, error) {
 	ctxLogger := logger.NewLogger(ctx)
-	condition.WithCondition("deleted_at", nil, constants.Equal)
+	condition = getCondition(condition)
 
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 	columns, err := database.GetColumnsGeneric[T]()
@@ -346,6 +347,7 @@ func (r *repository[T]) DeleteMany(ctx context.Context, ids []string) error {
 func (r *repository[T]) DeleteByCondition(ctx context.Context, condition *database.CommonCondition) error {
 	ctxLogger := logger.NewLogger(ctx)
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+	condition = getCondition(condition)
 
 	db := psql.Update(r.table)
 	db, err := BuildUpdateConditions(db, condition.Conditions)

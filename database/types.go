@@ -29,16 +29,18 @@ type Condition struct {
 }
 
 type CommonCondition struct {
-	Conditions []Condition
-	Sorting    []Sorting
-	Paging     *Paging
+	Conditions      []Condition
+	Sorting         []Sorting
+	Paging          *Paging
+	IsSkipDeletedAt bool
 }
 
 func NewCommonCondition() *CommonCondition {
 	return &CommonCondition{
-		Conditions: []Condition{},
-		Sorting:    []Sorting{},
-		Paging:     &Paging{},
+		Conditions:      []Condition{},
+		Sorting:         []Sorting{},
+		Paging:          &Paging{},
+		IsSkipDeletedAt: false,
 	}
 }
 
@@ -86,5 +88,10 @@ func (cc *CommonCondition) WithSorting(field string, order string) *CommonCondit
 		Order: order,
 	}
 	cc.Sorting = append(cc.Sorting, sorting)
+	return cc
+}
+
+func (cc *CommonCondition) SkipDeletedAt() *CommonCondition {
+	cc.IsSkipDeletedAt = true
 	return cc
 }
