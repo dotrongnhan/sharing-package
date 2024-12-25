@@ -22,7 +22,7 @@ func NewRepository[T any](db *sqlx.DB, table string) database.BaseRepository[T] 
 	}
 }
 
-func (r *repository[T]) getTotal(ctx context.Context, condition *database.CommonCondition) (uint64, error) {
+func (r *repository[T]) CountByCondition(ctx context.Context, condition *database.CommonCondition) (uint64, error) {
 	ctxLogger := logger.NewLogger(ctx)
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 	db := psql.Select("count(*)").
@@ -64,7 +64,7 @@ func (r *repository[T]) TableName() string {
 func (r *repository[T]) GetByCondition(ctx context.Context, condition *database.CommonCondition) (*database.Pagination[T], error) {
 	ctxLogger := logger.NewLogger(ctx)
 	condition.WithCondition("deleted_at", nil, constants.Equal)
-	total, err := r.getTotal(ctx, condition)
+	total, err := r.CountByCondition(ctx, condition)
 	if err != nil {
 		ctxLogger.Errorf("Failed while get total, err: %v", err)
 		return nil, err
@@ -95,6 +95,33 @@ func (r *repository[T]) GetByCondition(ctx context.Context, condition *database.
 		Data: results,
 		Meta: meta,
 	}, nil
+}
+
+func (r *repository[T]) GetMany(ctx context.Context, condition *database.CommonCondition) ([]*T, error) {
+	ctxLogger := logger.NewLogger(ctx)
+	condition.WithCondition("deleted_at", nil, constants.Equal)
+
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+	columns, err := database.GetColumnsGeneric[T]()
+	db := psql.Select(columns...).
+		From(r.table)
+	db, err = BuildQuery(db, condition)
+	if err != nil {
+		ctxLogger.Errorf("Failed while build query, err: %v", err)
+		return nil, err
+	}
+	query, args, err := db.ToSql()
+	if err != nil {
+		ctxLogger.Errorf("Failed while build query, err: %v", err)
+		return nil, err
+	}
+	var results []*T
+	err = Select(ctx, r.db, &results, query, args...)
+	if err != nil {
+		ctxLogger.Errorf("Failed while select %s, err: %v", r.table, err)
+		return nil, err
+	}
+	return results, nil
 }
 
 func (r *repository[T]) GetById(ctx context.Context, id string) (*T, error) {
