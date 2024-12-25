@@ -5,7 +5,9 @@ import (
 )
 
 type BaseRepository[T any] interface {
+	CountByCondition(ctx context.Context, condition *CommonCondition) (uint64, error)
 	GetByCondition(ctx context.Context, condition *CommonCondition) (*Pagination[T], error)
+	GetMany(ctx context.Context, condition *CommonCondition) ([]*T, error)
 	GetById(ctx context.Context, id string) (*T, error)
 	GetByIds(ctx context.Context, ids []string) ([]*T, error)
 	Create(ctx context.Context, entity *T) (*T, error)
