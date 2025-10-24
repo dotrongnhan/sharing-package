@@ -38,26 +38,42 @@ func NewJSONLogger(traceID string) *JSONLogger {
 	}
 }
 
+func NewLoggerWithInput(ctx context.Context, input interface{}) *log.Helper {
+	traceID, _ := ctx.Value(TraceKey).(string)
+	logger := NewJSONLoggerWithInput(traceID, input)
+	return log.NewHelper(logger)
+}
+
+func NewJSONLoggerWithInput(traceID string, input interface{}) *JSONLogger {
+	return &JSONLogger{
+		Logger:  log.NewStdLogger(os.Stdout),
+		TraceID: traceID,
+		Input:   input,
+	}
+}
+
 func getCallerInfo() string {
 	_, file, line, ok := runtime.Caller(3) // Adjust stack depth as needed
 	if !ok {
 		return "unknown"
 	}
 
-	// Lấy đường dẫn gốc từ thư mục chạy (root project)
-	// filepath.Abs("") trả về đường dẫn tuyệt đối của thư mục hiện tại.
-	rootPath, err := filepath.Abs("")
-	if err != nil {
-		return "unknown"
+	// Khởi tạo projectRoot (chỉ chạy 1 lần)
+	// Lần đầu tiên chạy, nó sẽ dùng 'file' (từ main.go) để tìm root
+	initRootOnce.Do(func() {
+		findProjectRoot(file) // Truyền file của hàm gọi vào
+	})
+
+	// Tính toán đường dẫn tương đối
+	// Nếu đã tìm được projectRoot, hãy tạo đường dẫn tương đối
+	if projectRoot != "" {
+		if relPath, err := filepath.Rel(projectRoot, file); err == nil {
+			return fmt.Sprintf("%s:%d", relPath, line)
+		}
 	}
 
-	// Chuyển đường dẫn file thành đường dẫn tương đối so với rootPath
-	relativePath, err := filepath.Rel(rootPath, file)
-	if err != nil {
-		return fmt.Sprintf("%s:%d", file, line) // Trả về đường dẫn gốc nếu không thể lấy tương đối
-	}
-
-	return fmt.Sprintf("%s:%d", relativePath, line)
+	// Fallback: Nếu không tìm được root, trả về đường dẫn đầy đủ
+	return fmt.Sprintf("%s:%d", file, line)
 }
 
 func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
@@ -78,6 +94,10 @@ func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
 		}
 	}
 
+	if l.Input != nil {
+		entry.Input = l.Input
+	}
+
 	// Chuyển entry sang JSON
 	b, err := json.Marshal(entry)
 	if err != nil {
@@ -87,4 +107,28 @@ func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
 	// Ghi trực tiếp chuỗi JSON mà không thêm bất kỳ key-value nào khác
 	_, err = fmt.Fprintln(os.Stdout, string(b))
 	return err
+}
+
+// findProjectRoot sẽ chạy 1 LẦN DUY NHẤT
+// sử dụng file của hàm gọi đầu tiên để tìm gốc
+func findProjectRoot(callerFile string) {
+	// Bắt đầu từ thư mục chứa file gọi log, đi ngược lên trên
+	// để tìm go.mod
+	dir := filepath.Dir(callerFile)
+	for {
+		// Nếu tìm thấy go.mod, chúng ta xem đây là thư mục gốc
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			projectRoot = dir // Lưu lại đường dẫn tuyệt đối của gốc
+			return
+		}
+
+		// Đi lên thư mục cha
+		parent := filepath.Dir(dir)
+
+		// Nếu đã lên đến thư mục gốc (root /) mà không thấy
+		if parent == dir {
+			return
+		}
+		dir = parent
+	}
 }
