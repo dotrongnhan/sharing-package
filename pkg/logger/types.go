@@ -8,12 +8,12 @@ import (
 const (
 	TraceKey         = "trace_id"
 	TraceIDHeaderKey = "X-Trace-ID"
+	LoggerWithInput  = "input"
 )
 
 type JSONLogger struct {
 	Logger  log.Logger
 	TraceID string
-	Input   interface{}
 }
 
 type logEntry struct {
@@ -26,7 +26,7 @@ type logEntry struct {
 }
 
 var (
-	// Biến toàn cục để lưu đường dẫn gốc của dự án
-	projectRoot  string
-	initRootOnce sync.Once
+	loggerPackageDir string
+	projectRoot      string
+	initRootOnce     sync.Once // <-- Dùng lại sync.Once
 )

@@ -38,42 +38,63 @@ func NewJSONLogger(traceID string) *JSONLogger {
 	}
 }
 
-func NewLoggerWithInput(ctx context.Context, input interface{}) *log.Helper {
+func NewLoggerWith(ctx context.Context, keyvals ...interface{}) *log.Helper {
+	// 1. Lấy traceID từ context
 	traceID, _ := ctx.Value(TraceKey).(string)
-	logger := NewJSONLoggerWithInput(traceID, input)
-	return log.NewHelper(logger)
-}
 
-func NewJSONLoggerWithInput(traceID string, input interface{}) *JSONLogger {
-	return &JSONLogger{
-		Logger:  log.NewStdLogger(os.Stdout),
-		TraceID: traceID,
-		Input:   input,
-	}
+	// 2. Tạo logger GỐC (*JSONLogger)
+	rawLogger := NewJSONLogger(traceID)
+
+	// 3. Dùng log.With toàn cục để thêm các keyvals (Cách này thêm 1 lớp stack)
+	loggerWithFields := log.With(rawLogger, keyvals...)
+
+	// 4. Bọc lại bằng Helper
+	return log.NewHelper(loggerWithFields)
 }
 
 func getCallerInfo() string {
-	_, file, line, ok := runtime.Caller(3) // Adjust stack depth as needed
-	if !ok {
-		return "unknown"
-	}
+	pcs := make([]uintptr, 20)
+	n := runtime.Callers(3, pcs) // Bắt đầu từ 3 (bỏ qua Callers, getCallerInfo, JSONLogger.Log)
+	frames := runtime.CallersFrames(pcs[:n])
 
-	// Khởi tạo projectRoot (chỉ chạy 1 lần)
-	// Lần đầu tiên chạy, nó sẽ dùng 'file' (từ main.go) để tìm root
-	initRootOnce.Do(func() {
-		findProjectRoot(file) // Truyền file của hàm gọi vào
-	})
-
-	// Tính toán đường dẫn tương đối
-	// Nếu đã tìm được projectRoot, hãy tạo đường dẫn tương đối
-	if projectRoot != "" {
-		if relPath, err := filepath.Rel(projectRoot, file); err == nil {
-			return fmt.Sprintf("%s:%d", relPath, line)
+	for {
+		frame, more := frames.Next()
+		if frame.File == "" {
+			break
 		}
-	}
 
-	// Fallback: Nếu không tìm được root, trả về đường dẫn đầy đủ
-	return fmt.Sprintf("%s:%d", file, line)
+		frameDir := filepath.Dir(frame.File)
+
+		// Lọc bỏ file của logger và thư viện
+		if frameDir == loggerPackageDir ||
+			strings.Contains(frame.File, "go/pkg/mod") ||
+			strings.Contains(frame.File, "/vendor/") {
+
+			if !more {
+				break
+			}
+			continue
+		}
+
+		// --- Đã tìm thấy frame của người dùng ---
+
+		// Dùng sync.Once để tìm project root DỰA TRÊN file của frame
+		// Đây là mấu chốt để tìm đúng go.mod
+		initRootOnce.Do(func() {
+			findProjectRoot(frame.File)
+		})
+
+		// Sử dụng projectRoot đã được tính toán
+		if projectRoot != "" {
+			if rel, err := filepath.Rel(projectRoot, frame.File); err == nil {
+				return fmt.Sprintf("%s:%d", rel, frame.Line)
+			}
+		}
+
+		// Fallback:
+		return fmt.Sprintf("%s:%d", frame.File, frame.Line)
+	}
+	return "unknown"
 }
 
 func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
@@ -84,18 +105,23 @@ func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
 		Caller:  getCallerInfo(),
 	}
 
-	// Xử lý keyvals để thêm vào message nếu có các giá trị bổ sung
+	// Lặp qua TẤT CẢ keyvals
 	if len(keyvals) > 1 {
 		for i := 0; i < len(keyvals)-1; i += 2 {
-			if keyvals[i] == "msg" {
-				entry.Msg = fmt.Sprintf("%v", keyvals[i+1])
+			key, ok := keyvals[i].(string)
+			if !ok {
+				continue
 			}
-			// Có thể xử lý thêm các keyvals khác nếu cần thiết
-		}
-	}
+			val := keyvals[i+1]
 
-	if l.Input != nil {
-		entry.Input = l.Input
+			switch key {
+			case "msg":
+				entry.Msg = fmt.Sprintf("%v", val)
+			case "input":
+				entry.Input = val
+				// Bạn có thể thêm các case khác nếu muốn (ví dụ: "error")
+			}
+		}
 	}
 
 	// Chuyển entry sang JSON
@@ -130,5 +156,13 @@ func findProjectRoot(callerFile string) {
 			return
 		}
 		dir = parent
+	}
+}
+
+func init() {
+	// Chỉ cần lấy thư mục của package logger
+	_, file, _, ok := runtime.Caller(0)
+	if ok {
+		loggerPackageDir = filepath.Dir(file)
 	}
 }
