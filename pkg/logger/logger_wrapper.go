@@ -28,63 +28,81 @@ func NewBackgroundContextWithTraceID(serviceName string) context.Context {
 
 func NewLogger(ctx context.Context) *log.Helper {
 	traceID, _ := ctx.Value(TraceKey).(string)
-	logger := NewJSONLogger(traceID)
+	logger := NewJSONLogger(traceID, defaultCallerDepth)
 	return log.NewHelper(logger)
 }
-func NewJSONLogger(traceID string) *JSONLogger {
+
+func NewJSONLogger(traceID string, depth int) *JSONLogger {
 	return &JSONLogger{
 		Logger:  log.NewStdLogger(os.Stdout),
 		TraceID: traceID,
+		Depth:   depth,
 	}
 }
 
-func getCallerInfo() string {
-	_, file, line, ok := runtime.Caller(3) // Adjust stack depth as needed
+func NewLoggerWith(ctx context.Context, keyvals ...interface{}) *log.Helper {
+	traceID, _ := ctx.Value(TraceKey).(string)
+
+	// Sửa: Dùng defaultCallerDepth + 1 (vì có thêm 1 lớp log.With)
+	rawLogger := NewJSONLogger(traceID, defaultCallerDepth+1)
+
+	loggerWithFields := log.With(rawLogger, keyvals...)
+	return log.NewHelper(loggerWithFields)
+}
+
+func getCallerInfo(depth int) string {
+	_, file, line, ok := runtime.Caller(depth)
 	if !ok {
 		return "unknown"
 	}
-
-	// Lấy đường dẫn gốc từ thư mục chạy (root project)
-	// filepath.Abs("") trả về đường dẫn tuyệt đối của thư mục hiện tại.
 	rootPath, err := filepath.Abs("")
 	if err != nil {
 		return "unknown"
 	}
-
-	// Chuyển đường dẫn file thành đường dẫn tương đối so với rootPath
 	relativePath, err := filepath.Rel(rootPath, file)
 	if err != nil {
-		return fmt.Sprintf("%s:%d", file, line) // Trả về đường dẫn gốc nếu không thể lấy tương đối
+		return fmt.Sprintf("%s:%d", file, line)
+	}
+
+	if strings.HasPrefix(relativePath, "..") {
+		return fmt.Sprintf("%s:%d", file, line)
 	}
 
 	return fmt.Sprintf("%s:%d", relativePath, line)
 }
 
 func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
-	entry := logEntry{
-		Time:    time.Now().Format(time.RFC3339),
-		Level:   level.String(),
-		TraceID: l.TraceID,
-		Caller:  getCallerInfo(),
-	}
+	entryMap := make(map[string]interface{})
 
-	// Xử lý keyvals để thêm vào message nếu có các giá trị bổ sung
+	// Thêm các trường cố định
+	entryMap[TimeKey] = time.Now().Format(time.RFC3339)
+	entryMap[LevelKey] = level.String()
+	entryMap[TraceKey] = l.TraceID
+	entryMap[CallerKey] = getCallerInfo(l.Depth)
+
+	// Lặp qua TẤT CẢ keyvals và thêm vào map
 	if len(keyvals) > 1 {
 		for i := 0; i < len(keyvals)-1; i += 2 {
-			if keyvals[i] == "msg" {
-				entry.Msg = fmt.Sprintf("%v", keyvals[i+1])
+			key, ok := keyvals[i].(string)
+			if !ok {
+				continue
 			}
-			// Có thể xử lý thêm các keyvals khác nếu cần thiết
+			val := keyvals[i+1]
+
+			// Xử lý "msg" đặc biệt để đảm bảo nó là string
+			if key == MsgKey {
+				entryMap[MsgKey] = fmt.Sprintf("%v", val)
+			} else {
+				entryMap[key] = val
+			}
 		}
 	}
 
-	// Chuyển entry sang JSON
-	b, err := json.Marshal(entry)
+	b, err := json.Marshal(entryMap)
 	if err != nil {
 		return err
 	}
 
-	// Ghi trực tiếp chuỗi JSON mà không thêm bất kỳ key-value nào khác
 	_, err = fmt.Fprintln(os.Stdout, string(b))
 	return err
 }
