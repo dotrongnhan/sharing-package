@@ -28,73 +28,47 @@ func NewBackgroundContextWithTraceID(serviceName string) context.Context {
 
 func NewLogger(ctx context.Context) *log.Helper {
 	traceID, _ := ctx.Value(TraceKey).(string)
-	logger := NewJSONLogger(traceID)
+	logger := NewJSONLogger(traceID, defaultCallerDepth)
 	return log.NewHelper(logger)
 }
-func NewJSONLogger(traceID string) *JSONLogger {
+
+func NewJSONLogger(traceID string, depth int) *JSONLogger {
 	return &JSONLogger{
 		Logger:  log.NewStdLogger(os.Stdout),
 		TraceID: traceID,
+		Depth:   depth,
 	}
 }
 
 func NewLoggerWith(ctx context.Context, keyvals ...interface{}) *log.Helper {
-	// 1. Lấy traceID từ context
 	traceID, _ := ctx.Value(TraceKey).(string)
 
-	// 2. Tạo logger GỐC (*JSONLogger)
-	rawLogger := NewJSONLogger(traceID)
+	// Sửa: Dùng defaultCallerDepth + 1 (vì có thêm 1 lớp log.With)
+	rawLogger := NewJSONLogger(traceID, defaultCallerDepth+1)
 
-	// 3. Dùng log.With toàn cục để thêm các keyvals (Cách này thêm 1 lớp stack)
 	loggerWithFields := log.With(rawLogger, keyvals...)
-
-	// 4. Bọc lại bằng Helper
 	return log.NewHelper(loggerWithFields)
 }
 
-func getCallerInfo() string {
-	pcs := make([]uintptr, 20)
-	n := runtime.Callers(3, pcs) // Bắt đầu từ 3 (bỏ qua Callers, getCallerInfo, JSONLogger.Log)
-	frames := runtime.CallersFrames(pcs[:n])
-
-	for {
-		frame, more := frames.Next()
-		if frame.File == "" {
-			break
-		}
-
-		frameDir := filepath.Dir(frame.File)
-
-		// Lọc bỏ file của logger và thư viện
-		if frameDir == loggerPackageDir ||
-			strings.Contains(frame.File, "go/pkg/mod") ||
-			strings.Contains(frame.File, "/vendor/") {
-
-			if !more {
-				break
-			}
-			continue
-		}
-
-		// --- Đã tìm thấy frame của người dùng ---
-
-		// Dùng sync.Once để tìm project root DỰA TRÊN file của frame
-		// Đây là mấu chốt để tìm đúng go.mod
-		initRootOnce.Do(func() {
-			findProjectRoot(frame.File)
-		})
-
-		// Sử dụng projectRoot đã được tính toán
-		if projectRoot != "" {
-			if rel, err := filepath.Rel(projectRoot, frame.File); err == nil {
-				return fmt.Sprintf("%s:%d", rel, frame.Line)
-			}
-		}
-
-		// Fallback:
-		return fmt.Sprintf("%s:%d", frame.File, frame.Line)
+func getCallerInfo(depth int) string {
+	_, file, line, ok := runtime.Caller(depth)
+	if !ok {
+		return "unknown"
 	}
-	return "unknown"
+	rootPath, err := filepath.Abs("")
+	if err != nil {
+		return "unknown"
+	}
+	relativePath, err := filepath.Rel(rootPath, file)
+	if err != nil {
+		return fmt.Sprintf("%s:%d", file, line)
+	}
+
+	if strings.HasPrefix(relativePath, "..") {
+		return fmt.Sprintf("%s:%d", file, line)
+	}
+
+	return fmt.Sprintf("%s:%d", relativePath, line)
 }
 
 func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
@@ -102,7 +76,7 @@ func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
 		Time:    time.Now().Format(time.RFC3339),
 		Level:   level.String(),
 		TraceID: l.TraceID,
-		Caller:  getCallerInfo(),
+		Caller:  getCallerInfo(l.Depth),
 	}
 
 	// Lặp qua TẤT CẢ keyvals
@@ -119,50 +93,14 @@ func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
 				entry.Msg = fmt.Sprintf("%v", val)
 			case "input":
 				entry.Input = val
-				// Bạn có thể thêm các case khác nếu muốn (ví dụ: "error")
 			}
 		}
 	}
 
-	// Chuyển entry sang JSON
 	b, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
-
-	// Ghi trực tiếp chuỗi JSON mà không thêm bất kỳ key-value nào khác
 	_, err = fmt.Fprintln(os.Stdout, string(b))
 	return err
-}
-
-// findProjectRoot sẽ chạy 1 LẦN DUY NHẤT
-// sử dụng file của hàm gọi đầu tiên để tìm gốc
-func findProjectRoot(callerFile string) {
-	// Bắt đầu từ thư mục chứa file gọi log, đi ngược lên trên
-	// để tìm go.mod
-	dir := filepath.Dir(callerFile)
-	for {
-		// Nếu tìm thấy go.mod, chúng ta xem đây là thư mục gốc
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			projectRoot = dir // Lưu lại đường dẫn tuyệt đối của gốc
-			return
-		}
-
-		// Đi lên thư mục cha
-		parent := filepath.Dir(dir)
-
-		// Nếu đã lên đến thư mục gốc (root /) mà không thấy
-		if parent == dir {
-			return
-		}
-		dir = parent
-	}
-}
-
-func init() {
-	// Chỉ cần lấy thư mục của package logger
-	_, file, _, ok := runtime.Caller(0)
-	if ok {
-		loggerPackageDir = filepath.Dir(file)
-	}
 }

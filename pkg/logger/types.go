@@ -2,7 +2,6 @@ package logger
 
 import (
 	"github.com/go-kratos/kratos/v2/log"
-	"sync"
 )
 
 const (
@@ -14,6 +13,7 @@ const (
 type JSONLogger struct {
 	Logger  log.Logger
 	TraceID string
+	Depth   int // Thêm dòng này
 }
 
 type logEntry struct {
@@ -25,8 +25,4 @@ type logEntry struct {
 	Input   interface{} `json:"input,omitempty"`
 }
 
-var (
-	loggerPackageDir string
-	projectRoot      string
-	initRootOnce     sync.Once // <-- Dùng lại sync.Once
-)
+const defaultCallerDepth = 3
