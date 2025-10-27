@@ -72,14 +72,15 @@ func getCallerInfo(depth int) string {
 }
 
 func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
-	entry := logEntry{
-		Time:    time.Now().Format(time.RFC3339),
-		Level:   level.String(),
-		TraceID: l.TraceID,
-		Caller:  getCallerInfo(l.Depth),
-	}
+	entryMap := make(map[string]interface{})
 
-	// Lặp qua TẤT CẢ keyvals
+	// Thêm các trường cố định
+	entryMap[TimeKey] = time.Now().Format(time.RFC3339)
+	entryMap[LevelKey] = level.String()
+	entryMap[TraceKey] = l.TraceID
+	entryMap[CallerKey] = getCallerInfo(l.Depth)
+
+	// Lặp qua TẤT CẢ keyvals và thêm vào map
 	if len(keyvals) > 1 {
 		for i := 0; i < len(keyvals)-1; i += 2 {
 			key, ok := keyvals[i].(string)
@@ -88,19 +89,20 @@ func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
 			}
 			val := keyvals[i+1]
 
-			switch key {
-			case "msg":
-				entry.Msg = fmt.Sprintf("%v", val)
-			case "input":
-				entry.Input = val
+			// Xử lý "msg" đặc biệt để đảm bảo nó là string
+			if key == MsgKey {
+				entryMap[MsgKey] = fmt.Sprintf("%v", val)
+			} else {
+				entryMap[key] = val
 			}
 		}
 	}
 
-	b, err := json.Marshal(entry)
+	b, err := json.Marshal(entryMap)
 	if err != nil {
 		return err
 	}
+
 	_, err = fmt.Fprintln(os.Stdout, string(b))
 	return err
 }

@@ -7,7 +7,11 @@ import (
 const (
 	TraceKey         = "trace_id"
 	TraceIDHeaderKey = "X-Trace-ID"
-	LoggerWithInput  = "input"
+	InputKey         = "input"
+	CallerKey        = "caller"
+	TimeKey          = "time"
+	MsgKey           = "msg"
+	LevelKey         = "level"
 )
 
 type JSONLogger struct {
