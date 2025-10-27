@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -56,22 +57,26 @@ func getCallerInfo(depth int) string {
 		return "unknown"
 	}
 
-	// Lấy thư mục của file
+	anchor := getProjectAnchor()
+	if anchor != "" {
+		searchString := anchor + "/"
+		idx := strings.Index(file, searchString)
+
+		if idx != -1 {
+			relativePath := file[idx+len(searchString):]
+			return fmt.Sprintf("%s:%d", relativePath, line)
+		}
+	}
+
 	dir := filepath.Dir(file)
-
-	// Tìm thư mục gốc dự án cho thư mục này
 	projectRoot := findProjectRootForDir(dir)
-
 	if projectRoot != "" {
-		// Nếu tìm thấy gốc, tính toán đường dẫn tương đối
 		relativePath, err := filepath.Rel(projectRoot, file)
 		if err == nil {
 			return fmt.Sprintf("%s:%d", relativePath, line)
 		}
 	}
 
-	// Fallback: Nếu không tìm thấy go.mod hoặc có lỗi,
-	// chỉ trả về tên file (an toàn hơn đường dẫn tuyệt đối)
 	return fmt.Sprintf("%s:%d", filepath.Base(file), line)
 }
 
@@ -111,33 +116,47 @@ func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
 	return err
 }
 
+// --- (Helper 1) Phương pháp Production (debug.ReadBuildInfo) ---
+func getProjectAnchor() string {
+	anchorOnce.Do(func() {
+		info, ok := debug.ReadBuildInfo()
+		if !ok {
+			projectAnchor = ""
+			return
+		}
+
+		anchor := info.Main.Path
+
+		if anchor == "command-line-arguments" || anchor == "" {
+			projectAnchor = ""
+			return
+		}
+		projectAnchor = anchor
+	})
+	return projectAnchor
+}
+
+// --- (Helper 2) Phương pháp Local 'go run' (Tìm go.mod) ---
 func findProjectRootForDir(dir string) string {
-	// 1. Kiểm tra cache trước
 	if root, ok := fileDirCache.Load(dir); ok {
 		return root.(string)
 	}
 
-	// 2. Không có trong cache, bắt đầu tìm kiếm
 	currentDir := dir
 	for {
 		goModPath := filepath.Join(currentDir, "go.mod")
-		// Kiểm tra xem file go.mod có tồn tại không
 		if _, err := os.Stat(goModPath); err == nil {
-			// Đã tìm thấy! Lưu vào cache và trả về.
 			fileDirCache.Store(dir, currentDir)
 			return currentDir
 		}
 
-		// Đi lên thư mục cha
 		parentDir := filepath.Dir(currentDir)
 		if parentDir == currentDir {
-			// Đã đến thư mục gốc của hệ thống (ví dụ: "/")
 			break
 		}
 		currentDir = parentDir
 	}
 
-	// 3. Không tìm thấy. Lưu chuỗi rỗng vào cache để không tìm lại.
 	fileDirCache.Store(dir, "")
 	return ""
 }

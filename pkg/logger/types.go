@@ -32,5 +32,9 @@ type logEntry struct {
 }
 
 var (
+	// (Cache cho Phương pháp 1: Build Info)
+	projectAnchor string
+	anchorOnce    sync.Once
+	// (Cache cho Phương pháp 2: Tìm go.mod)
 	fileDirCache sync.Map
 )
