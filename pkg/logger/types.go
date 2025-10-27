@@ -2,16 +2,18 @@ package logger
 
 import (
 	"github.com/go-kratos/kratos/v2/log"
+	"sync"
 )
 
 const (
-	TraceKey         = "trace_id"
-	TraceIDHeaderKey = "X-Trace-ID"
-	InputKey         = "input"
-	CallerKey        = "caller"
-	TimeKey          = "time"
-	MsgKey           = "msg"
-	LevelKey         = "level"
+	TraceKey           = "trace_id"
+	TraceIDHeaderKey   = "X-Trace-ID"
+	InputKey           = "input"
+	CallerKey          = "caller"
+	TimeKey            = "time"
+	MsgKey             = "msg"
+	LevelKey           = "level"
+	defaultCallerDepth = 3
 )
 
 type JSONLogger struct {
@@ -29,4 +31,6 @@ type logEntry struct {
 	Input   interface{} `json:"input,omitempty"`
 }
 
-const defaultCallerDepth = 3
+var (
+	fileDirCache sync.Map
+)
