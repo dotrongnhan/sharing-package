@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -57,26 +56,28 @@ func getCallerInfo(depth int) string {
 		return "unknown"
 	}
 
-	anchor := getProjectAnchor()
-	if anchor != "" {
-		searchString := anchor + "/"
-		idx := strings.Index(file, searchString)
+	// --- Phương pháp 1: Ưu tiên Production (Theo yêu cầu của bạn) ---
+	// Tìm "go/src/backend/"
+	const prodAnchor = "go/src/backend/"
+	idx := strings.Index(file, prodAnchor)
+	if idx != -1 {
+		// Cắt chuỗi để lấy mọi thứ SAU "go/src/backend/"
+		relativePath := file[idx+len(prodAnchor):]
+		return fmt.Sprintf("%s:%d", relativePath, line)
+	}
 
-		if idx != -1 {
-			relativePath := file[idx+len(searchString):]
+	// --- Phương pháp 2: Thử kiểu Local (Cách bình thường) ---
+	// (Chỉ chạy nếu Phương pháp 1 thất bại)
+	rootPath, err := filepath.Abs("")
+	if err == nil {
+		relativePath, err := filepath.Rel(rootPath, file)
+		if err == nil && !strings.HasPrefix(relativePath, "..") {
 			return fmt.Sprintf("%s:%d", relativePath, line)
 		}
 	}
 
-	dir := filepath.Dir(file)
-	projectRoot := findProjectRootForDir(dir)
-	if projectRoot != "" {
-		relativePath, err := filepath.Rel(projectRoot, file)
-		if err == nil {
-			return fmt.Sprintf("%s:%d", relativePath, line)
-		}
-	}
-
+	// --- Phương pháp 3: Fallback (Dự phòng) ---
+	// Nếu cả 2 đều thất bại, trả về tên file
 	return fmt.Sprintf("%s:%d", filepath.Base(file), line)
 }
 
@@ -114,49 +115,4 @@ func (l *JSONLogger) Log(level log.Level, keyvals ...interface{}) error {
 
 	_, err = fmt.Fprintln(os.Stdout, string(b))
 	return err
-}
-
-// --- (Helper 1) Phương pháp Production (debug.ReadBuildInfo) ---
-func getProjectAnchor() string {
-	anchorOnce.Do(func() {
-		info, ok := debug.ReadBuildInfo()
-		if !ok {
-			projectAnchor = ""
-			return
-		}
-
-		anchor := info.Main.Path
-
-		if anchor == "command-line-arguments" || anchor == "" {
-			projectAnchor = ""
-			return
-		}
-		projectAnchor = anchor
-	})
-	return projectAnchor
-}
-
-// --- (Helper 2) Phương pháp Local 'go run' (Tìm go.mod) ---
-func findProjectRootForDir(dir string) string {
-	if root, ok := fileDirCache.Load(dir); ok {
-		return root.(string)
-	}
-
-	currentDir := dir
-	for {
-		goModPath := filepath.Join(currentDir, "go.mod")
-		if _, err := os.Stat(goModPath); err == nil {
-			fileDirCache.Store(dir, currentDir)
-			return currentDir
-		}
-
-		parentDir := filepath.Dir(currentDir)
-		if parentDir == currentDir {
-			break
-		}
-		currentDir = parentDir
-	}
-
-	fileDirCache.Store(dir, "")
-	return ""
 }
